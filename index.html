@@ -222,7 +222,7 @@ const FIREBASE_CONFIG={
   appId:"1:231303176213:web:19705d6c723d0180712e1c"
 };
 const DATA_VERSION=3; // これを上げると、クラウドが古い時に内蔵データで自動上書き
-const BUILD='b3-0810';
+const BUILD='b4-0811';
 let CLOUD=null, applyingRemote=false, saveTimer=null;
 function initCloud(){
   if(!FIREBASE_CONFIG.apiKey||typeof firebase==='undefined')return;
@@ -296,7 +296,7 @@ function vCal(){
     out+=calMonth(y,mo);
     m0.setMonth(mo+1);
   }
-  out+=`<div class="hint">📅 公開日／完成日を持つ項目だけ表示。チップをタップで編集。赤枠＝期限超過で未完。<br>青ドット＝半導体note（毎日）</div>`;
+  out+=`<div class="hint">📅 日付を持つ項目を表示。チップをタップで編集。赤枠＝期限超過で未完。</div>`;
   return out;
 }
 function calMonth(y,mo){
@@ -309,9 +309,7 @@ function calMonth(y,mo){
     const ds=`${y}-${pad(mo+1)}-${pad(dd)}`;
     const today=ds===TODAYS?' today':'';
     let inner=`<span class="dn">${dd}</span>`;
-    if(ds<=TODAYS)inner+=`<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#4c8dff;margin-left:3px;vertical-align:middle"></span>`;
-    else inner+=`<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#4c8dff;opacity:.3;margin-left:3px;vertical-align:middle"></span>`;
-    DATA.filter(it=>it.date===ds && it.track!=='semi').forEach(it=>{
+    DATA.filter(it=>it.date===ds).forEach(it=>{
       const col=TRACKS[it.track].color;
       const late=(!isDone(it) && daysTo(ds)<0)?' late':'';
       inner+=`<div class="evchip${late}" style="background:${col}22;color:${col};border:1px solid ${col}66" onclick="openModal('${it.id}')">${esc(it.title).slice(0,7)}</div>`;
