@@ -14,6 +14,10 @@
     font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
     -webkit-font-smoothing:antialiased}
   .wrap{max-width:840px;margin:0 auto;padding:14px 12px 90px}
+  /* PC（横幅が広い時）は画面全体を使う */
+  @media(min-width:900px){
+    .wrap{max-width:none;padding:20px 34px 90px}
+  }
   header{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px}
   h1{font-size:16px;margin:0}
   .subttl{color:var(--sub);font-size:11px;margin:0 0 12px}
@@ -222,7 +226,7 @@ const FIREBASE_CONFIG={
   appId:"1:231303176213:web:19705d6c723d0180712e1c"
 };
 const DATA_VERSION=3; // これを上げると、クラウドが古い時に内蔵データで自動上書き
-const BUILD='b4-0811';
+const BUILD='b5-0811';
 let CLOUD=null, applyingRemote=false, saveTimer=null;
 function initCloud(){
   if(!FIREBASE_CONFIG.apiKey||typeof firebase==='undefined')return;
