@@ -226,7 +226,7 @@ const FIREBASE_CONFIG={
   appId:"1:231303176213:web:19705d6c723d0180712e1c"
 };
 const DATA_VERSION=3; // これを上げると、クラウドが古い時に内蔵データで自動上書き
-const BUILD='b5-0811';
+const BUILD='b6-0811';
 let CLOUD=null, applyingRemote=false, saveTimer=null;
 function initCloud(){
   if(!FIREBASE_CONFIG.apiKey||typeof firebase==='undefined')return;
@@ -314,9 +314,11 @@ function calMonth(y,mo){
     const today=ds===TODAYS?' today':'';
     let inner=`<span class="dn">${dd}</span>`;
     DATA.filter(it=>it.date===ds).forEach(it=>{
-      const col=TRACKS[it.track].color;
-      const late=(!isDone(it) && daysTo(ds)<0)?' late':'';
-      inner+=`<div class="evchip${late}" style="background:${col}22;color:${col};border:1px solid ${col}66" onclick="openModal('${it.id}')">${esc(it.title).slice(0,7)}</div>`;
+      const dn=isDone(it);
+      const col=dn?'#6b7688':TRACKS[it.track].color; // 投稿済み/完成はグレー
+      const late=(!dn && daysTo(ds)<0)?' late':'';
+      const op=dn?';opacity:.7':'';
+      inner+=`<div class="evchip${late}" style="background:${col}22;color:${col};border:1px solid ${col}66${op}" onclick="openModal('${it.id}')">${dn?'✓':''}${esc(it.title).slice(0,7)}</div>`;
     });
     c+=`<div class="cald${today}">${inner}</div>`;
   }
