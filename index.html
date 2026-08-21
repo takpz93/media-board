@@ -208,7 +208,7 @@ function seed(){
   // 半導体note 8/11〜8/17（企画出し完了→cur:0）
   const semiUp=[["2026-08-11","味の素（ABF）","△","半導体の会社たち"],
    ["2026-08-12","信号機・電車が動く裏の半導体","○","あなたの周りの半導体たち"],
-   ["2026-08-13","iPhoneチップ滞留","△","3分でわかる半導体ニュース"],
+   ["2026-08-13","iPhoneチップ���留","△","3分でわかる半導体ニュース"],
    ["2026-08-14","中国が半導体装置を国産化","◎","3分でわかる半導体ニュース"],
    ["2026-08-15","プローバ／後工程の人間力","◎","文系のための半導体入門"],
    ["2026-08-16","パワー半導体（エアコン・EV）","○","会社たち／入門"],
@@ -226,7 +226,7 @@ const FIREBASE_CONFIG={
   appId:"1:231303176213:web:19705d6c723d0180712e1c"
 };
 const DATA_VERSION=3; // これを上げると、クラウドが古い時に内蔵データで自動上書き
-const BUILD='b6-0811';
+const BUILD='b7-0821';
 let CLOUD=null, applyingRemote=false, saveTimer=null;
 function initCloud(){
   if(!FIREBASE_CONFIG.apiKey||typeof firebase==='undefined')return;
@@ -508,6 +508,7 @@ function doImport(e){
   r.readAsText(f);e.target.value='';
 }
 
+document.addEventListener('click',function(e){var t=e.target;if(t&&t.tagName==='INPUT'&&t.type==='date'&&typeof t.showPicker==='function'){try{t.showPicker();}catch(_){}}});
 load();render();initCloud();
 </script>
 </body>
