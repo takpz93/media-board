@@ -220,7 +220,7 @@ function seed(){
 }
 
 // ===== GitHub同期（端末間・Claude連携）=====
-const BUILD='b9-0826';
+const BUILD='b10-0826';
 const MB_REPO='takpz93/media-board';
 const MB_PATH='data/board.json';
 const __T=[103,105,116,104,117,98,95,112,97,116,95,49,49,67,67,69,83,80,67,81,48,89,104,113,108,87,82,117,97,113,102,115,81,95,113,104,77,54,108,86,112,53,111,122,121,55,117,87,51,88,100,87,99,99,69,122,49,50,66,75,115,105,70,67,82,120,77,81,103,111,106,49,107,118,98,51,103,87,55,81,52,72,87,76,83,54,85,104,122,87,78,81,109];
@@ -399,7 +399,7 @@ function vGantt(){
         const done=(it.cur>=0 && i<=it.cur);
         const od=(!done && ds<TODAYS);
         const col=stageColor(it.track,i);
-        const style=done?`background:${col}`:`border:1.4px solid ${col};color:${col}`;
+        const style=done?`background:#868d99;color:#141821`:`border:1.4px solid ${col};color:${col}`;
         cell+=`<span class="gbadge${done?'':' future'}${od?' late':''}" style="${style}" title="${esc(nm)}（${ds}）" onclick="setProgress('${it.id}',${i})">${esc(stageAbbr(nm))}</span>`;
       }});
       r+=`<td class="gcell ${cls}">${cell}</td>`;
@@ -408,7 +408,7 @@ function vGantt(){
   });
   // 凡例（工程色）… 代表としてsemiとmiuraの並びを出すと多いので簡潔に
   let leg=`<div class="glegend"><span>凡例：</span>`+
-    `<span class="lg"><span class="sw" style="background:#37c98b"></span>塗り＝完了</span>`+
+    `<span class="lg"><span class="sw" style="background:#868d99"></span>グレー＝完了</span>`+
     `<span class="lg"><span class="sw" style="border:1.4px solid #8fb8ff"></span>枠＝これから</span>`+
     `<span class="lg"><span class="sw" style="outline:1.5px solid #ff5d5d;background:#ff5d5d33"></span>赤枠＝期限超過</span>`+
     `<span>／セルをタップで進捗更新・左の名前をタップで編集</span></div>`;
