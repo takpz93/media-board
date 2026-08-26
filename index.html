@@ -75,6 +75,14 @@
     width:26px;line-height:1.25;cursor:grab;color:#0d1017;letter-spacing:-.2px;touch-action:none;user-select:none}
   .gbadge.gdragging{opacity:.45;cursor:grabbing}
   .gcell.gdrop{outline:2px dashed #6ea8ff;outline-offset:-2px}
+  .badgemenu{position:fixed;z-index:80;width:210px;background:#141926;border:1px solid var(--line);
+    border-radius:12px;padding:11px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  .badgemenu .bm-t{font-size:11px;color:var(--txt);margin-bottom:8px;line-height:1.35}
+  .badgemenu .bm-l{display:block;font-size:10.5px;color:var(--sub);margin-bottom:4px}
+  .badgemenu input[type=date]{width:100%;background:#0f131c;border:1px solid var(--line);color:var(--txt);
+    border-radius:8px;padding:8px;font-size:13px;margin-bottom:8px}
+  .badgemenu .bm-btns{display:flex;flex-direction:column;gap:5px}
+  .badgemenu .btn{width:100%;text-align:center}
   .gbadge+.gbadge{margin-top:2px}
   .gbadge.future{color:inherit;background:transparent!important}
   .gbadge.late{outline:1.6px solid var(--danger);outline-offset:-1px}
@@ -222,7 +230,7 @@ function seed(){
 }
 
 // ===== GitHub同期（端末間・Claude連携）=====
-const BUILD='b13-0826';
+const BUILD='b14-0826';
 const MB_REPO='takpz93/media-board';
 const MB_PATH='data/board.json';
 const __T=[103,105,116,104,117,98,95,112,97,116,95,49,49,67,67,69,83,80,67,81,48,89,104,113,108,87,82,117,97,113,102,115,81,95,113,104,77,54,108,86,112,53,111,122,121,55,117,87,51,88,100,87,99,99,69,122,49,50,66,75,115,105,70,67,82,120,77,81,103,111,106,49,107,118,98,51,103,87,55,81,52,72,87,76,83,54,85,104,122,87,78,81,109];
@@ -438,7 +446,7 @@ function vGantt(){
     `<span class="lg"><span class="sw" style="background:#868d99"></span>グレー＝完了</span>`+
     `<span class="lg"><span class="sw" style="border:1.4px solid #8fb8ff"></span>枠＝これから</span>`+
     `<span class="lg"><span class="sw" style="outline:1.5px solid #ff5d5d;background:#ff5d5d33"></span>赤枠＝期限超過</span>`+
-    `<span>／バッジを別の日にドラッグ＝日付変更・タップ＝進捗更新・名前タップ＝編集</span></div>`;
+    `<span>／バッジをタップ＝日付変更・進捗（メニュー）／ドラッグでも日付移動／名前タップ＝編集</span></div>`;
   // 日付なし/候補
   const nod=DATA.filter(it=>!it.date && it.cur>=-1 && (!isDone(it)));
   let extra='';
@@ -473,9 +481,36 @@ function gUp(e){
   d.el.classList.remove('gdragging');
   if(gLastCell){gLastCell.classList.remove('gdrop');}
   const lc=gLastCell; gLastCell=null;
-  if(!d.moved){ setProgress(d.id,d.i); return; }        // タップ＝進捗
+  if(!d.moved){ openBadgeMenu(d.id,d.i,d.el); return; }  // タップ＝日付/進捗メニュー
   const cell=lc||(function(){const t=document.elementFromPoint(e.clientX,e.clientY);return t&&t.closest?t.closest('.gcell[data-date]'):null;})();
   if(cell){ setStageDate(d.id,d.i,cell.getAttribute('data-date')); }  // ドラッグ＝日付変更
+}
+// バッジをタップ→その工程の「日付変更／進捗」を直接操作できる小メニュー
+function closeBadgeMenu(){const e=document.getElementById('badgemenu');if(e)e.remove();document.removeEventListener('pointerdown',bmOutside,true);}
+function bmOutside(ev){const m=document.getElementById('badgemenu');if(m&&!m.contains(ev.target)&&!(ev.target.closest&&ev.target.closest('.gbadge')))closeBadgeMenu();}
+function openBadgeMenu(id,i,anchorEl){
+  const it=DATA.find(x=>x.id===id); if(!it)return;
+  const st=stagesOf(it); const nm=st[i]||('工程'+(i+1));
+  const cur=(it.sched&&it.sched[i])||it.date||TODAYS;
+  closeBadgeMenu();
+  const pop=document.createElement('div'); pop.id='badgemenu'; pop.className='badgemenu';
+  pop.innerHTML=`<div class="bm-t">${esc(it.title)}／<b>${esc(nm)}</b></div>`
+    +`<label class="bm-l">この工程の日付</label>`
+    +`<input type="date" id="bm_date" value="${cur}">`
+    +`<div class="bm-btns"><button class="btn" id="bm_done">✔ ここまで完了</button>`
+    +`<button class="btn" id="bm_undo">↩ 未完了に戻す</button></div>`
+    +`<button class="btn" id="bm_close" style="width:100%;margin-top:7px">閉じる</button>`;
+  document.body.appendChild(pop);
+  const r=anchorEl.getBoundingClientRect(); const pw=210;
+  let left=Math.min(Math.max(8,r.left),window.innerWidth-pw-8);
+  let top=r.bottom+6; if(top+180>window.innerHeight)top=Math.max(8,r.top-186);
+  pop.style.left=left+'px'; pop.style.top=top+'px';
+  const di=document.getElementById('bm_date');
+  di.addEventListener('change',e=>{ if(e.target.value){setStageDate(id,i,e.target.value);} closeBadgeMenu(); });
+  document.getElementById('bm_done').onclick=()=>{const x=DATA.find(y=>y.id===id);if(x){x.cur=i;touch(x);save();closeBadgeMenu();render();}};
+  document.getElementById('bm_undo').onclick=()=>{const x=DATA.find(y=>y.id===id);if(x){x.cur=Math.max(-1,i-1);touch(x);save();closeBadgeMenu();render();}};
+  document.getElementById('bm_close').onclick=closeBadgeMenu;
+  setTimeout(()=>document.addEventListener('pointerdown',bmOutside,true),0);
 }
 function initGanttDrag(){
   const v=document.getElementById('view'); if(!v||v.__gd)return; v.__gd=1;
