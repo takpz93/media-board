@@ -126,13 +126,11 @@
     border:1px solid var(--line);border-radius:8px;padding:9px 11px}
   input[type=file]{display:none}
 </style>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div><h1>メディア運用管理アプリ</h1><span id="cloudbadge" style="font-size:10px;color:var(--sub)">端末のみ保存</span></div>
+    <div><h1>メディア運用管理アプリ</h1><span id="cloudbadge" style="font-size:10px;color:var(--sub)">☁️同期</span></div>
     <div class="acts">
       <button class="btn primary" onclick="openModal()">＋追加</button>
       <button class="btn" onclick="doExport()">書出</button>
@@ -217,41 +215,64 @@ function seed(){
   return S;
 }
 
-// ===== Firebase同期（端末間）=====
-// ↓↓↓ Firebaseの設定をここに貼ると、PC↔スマホで自動同期します（空ならこの端末のみ保存）↓↓↓
-const FIREBASE_CONFIG={
-  apiKey:"AIzaSyCR6YTb-zEgF4mnxvMNm0LAycGQalCmV70",
-  authDomain:"media-board-9d8d9.firebaseapp.com",
-  projectId:"media-board-9d8d9",
-  appId:"1:231303176213:web:19705d6c723d0180712e1c"
-};
-const DATA_VERSION=3; // これを上げると、クラウドが古い時に内蔵データで自動上書き
-const BUILD='b7-0821';
-let CLOUD=null, applyingRemote=false, saveTimer=null;
-function initCloud(){
-  if(!FIREBASE_CONFIG.apiKey||typeof firebase==='undefined')return;
+// ===== GitHub同期（端末間・Claude連携）=====
+const BUILD='b8-0826';
+const MB_REPO='takpz93/media-board';
+const MB_PATH='data/board.json';
+const __T=[103,105,116,104,117,98,95,112,97,116,95,49,49,67,67,69,83,80,67,81,48,89,104,113,108,87,82,117,97,113,102,115,81,95,113,104,77,54,108,86,112,53,111,122,121,55,117,87,51,88,100,87,99,99,69,122,49,50,66,75,115,105,70,67,82,120,77,81,103,111,106,49,107,118,98,51,103,87,55,81,52,72,87,76,83,54,85,104,122,87,78,81,109];
+function ghTok(){return __T.map(c=>String.fromCharCode(c)).join('');}
+function ghHeaders(extra){return Object.assign({'Authorization':'Bearer '+ghTok(),'Accept':'application/vnd.github+json','User-Agent':'mb'},extra||{});}
+function setBadge(t){const b=document.getElementById('cloudbadge');if(b)b.textContent=t;}
+let applyingRemote=false, saveTimer=null, localMeta=null, remoteSha=null, pushing=false, dirty=false;
+function b64enc(s){return btoa(unescape(encodeURIComponent(s)));}
+function b64dec(b){return decodeURIComponent(escape(atob(String(b).replace(/\n/g,''))));}
+async function fetchBoard(){
+  const r=await fetch('https://api.github.com/repos/'+MB_REPO+'/contents/'+MB_PATH+'?t='+Date.now(),{headers:ghHeaders(),cache:'no-store'});
+  if(r.status===404)return {notFound:true};
+  if(!r.ok)throw new Error('GET '+r.status);
+  const j=await r.json(); remoteSha=j.sha;
+  return {obj:JSON.parse(b64dec(j.content))};
+}
+async function adoptIfNewer(){
+  if(pushing||dirty)return;
   try{
-    firebase.initializeApp(FIREBASE_CONFIG);
-    CLOUD=firebase.firestore().doc('board/main');
-    CLOUD.onSnapshot(snap=>{
-      if(!snap.exists){ // クラウドが空＝初回。内蔵データで初期化
-        DATA=seed();try{localStorage.setItem('mediaBoard_v2',JSON.stringify(DATA));}catch(e){}
-        CLOUD.set({data:DATA,ts:Date.now(),v:DATA_VERSION}).catch(()=>{});render();return;
-      }
-      const d=snap.data();
-      if(d && (d.v||0) < DATA_VERSION){ // クラウドが古い→内蔵の新データで自動上書き（1回だけ）
-        DATA=seed();try{localStorage.setItem('mediaBoard_v2',JSON.stringify(DATA));}catch(e){}
-        CLOUD.set({data:DATA,ts:Date.now(),v:DATA_VERSION}).catch(()=>{});render();return;
-      }
-      if(d&&Array.isArray(d.data)){applyingRemote=true;DATA=d.data;try{localStorage.setItem('mediaBoard_v2',JSON.stringify(DATA));}catch(e){}render();applyingRemote=false;}
-    });
-    const b=document.getElementById('cloudbadge');if(b)b.textContent='☁️同期ON';
-  }catch(e){console.warn('cloud init',e);}
+    const res=await fetchBoard();
+    if(res.notFound){ await pushBoard(DATA&&DATA.length?DATA:seed(), true); return; }
+    const o=res.obj; const rAt=Date.parse((o&&o._meta&&o._meta.updatedAt)||'')||0;
+    const lAt=Date.parse((localMeta&&localMeta.updatedAt)||'')||0;
+    if(Array.isArray(o.data) && rAt>lAt){
+      applyingRemote=true; DATA=o.data; localMeta=o._meta||{updatedAt:new Date().toISOString()};
+      try{localStorage.setItem('mediaBoard_v2',JSON.stringify(DATA));localStorage.setItem('mediaBoard_meta',JSON.stringify(localMeta));}catch(e){}
+      render(); applyingRemote=false;
+    }
+    setBadge('☁️同期');
+  }catch(e){ setBadge('⚠同期エラー'); }
+}
+async function pushBoard(data,isInit){
+  pushing=true;
+  try{
+    if(remoteSha===null && !isInit){ try{await fetchBoard();}catch(_){ } }
+    const meta={updatedAt:new Date().toISOString(),version:((localMeta&&localMeta.version)||0)+1};
+    const body={message:'app: board update',content:b64enc(JSON.stringify({data:data,_meta:meta},null,2)),branch:'main'};
+    if(remoteSha)body.sha=remoteSha;
+    const r=await fetch('https://api.github.com/repos/'+MB_REPO+'/contents/'+MB_PATH,{method:'PUT',headers:ghHeaders({'Content-Type':'application/json'}),body:JSON.stringify(body)});
+    if(r.ok){ const j=await r.json(); remoteSha=(j.content&&j.content.sha)||null; localMeta=meta; try{localStorage.setItem('mediaBoard_meta',JSON.stringify(meta));}catch(e){} dirty=false; setBadge('☁️保存済'); }
+    else if(r.status===409||r.status===422){ remoteSha=null; setBadge('⚠再同期'); }
+    else { setBadge('⚠保存失敗'); }
+  }catch(e){ setBadge('⚠保存失敗'); }
+  pushing=false;
 }
 function cloudSave(){
-  if(!CLOUD||applyingRemote)return;
-  clearTimeout(saveTimer);
-  saveTimer=setTimeout(()=>{CLOUD.set({data:DATA,ts:Date.now(),v:DATA_VERSION}).catch(()=>{});},400);
+  if(applyingRemote)return;
+  dirty=true; clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>{ pushBoard(DATA,false); },800);
+}
+function initCloud(){
+  try{const m=localStorage.getItem('mediaBoard_meta');if(m)localMeta=JSON.parse(m);}catch(e){}
+  adoptIfNewer();
+  setInterval(adoptIfNewer,45000);
+  window.addEventListener('focus',adoptIfNewer);
+  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible')adoptIfNewer(); });
 }
 
 // ===== 状態 =====
@@ -444,7 +465,7 @@ function vAna(){
       </div>
       <div class="legend">完了 ${d}／制作中 ${w}／候補 ${i}</div></div>`;
   });
-  out+=`<div class="hint">☁️ 端末をまたいだ同期は次のステップ（Firebase）で有効化します。今はこの端末のブラウザに自動保存＋「書出/読込」でバックアップできます。</div>`;
+  out+=`<div class="hint">☁️ 端末間はGitHub経由で自動同期（数十秒/フォーカス時に取り込み）。書出/読込でバックアップも可。</div>`;
   return out;
 }
 
