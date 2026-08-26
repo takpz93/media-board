@@ -61,8 +61,19 @@
   .gtable thead th .wd{font-size:8px;display:block;opacity:.75}
   .gtable thead th.today{background:#213251;color:#8fb8ff}
   .gtable thead th.wend{color:#8a93a8;background:#141a25}
-  .gname{position:sticky;left:0;background:var(--panel2);z-index:2;min-width:138px;max-width:138px;
+  .gname{position:sticky;left:0;background:var(--panel2);z-index:2;min-width:156px;max-width:156px;
     text-align:left;padding:6px 8px;cursor:pointer}
+  .gname .gselbox{float:left;margin:1px 7px 0 0;display:flex;align-items:center}
+  .gname .gselbox input{width:16px;height:16px;cursor:pointer;accent-color:#2b6fff}
+  .gname .gnmwrap{display:block;overflow:hidden}
+  .gname .gnmwrap .t,.gname .gnmwrap .m{display:block}
+  .cardsel{position:absolute;top:9px;right:9px}
+  .cardsel input{width:16px;height:16px;cursor:pointer;accent-color:#2b6fff}
+  .pipe{position:relative}
+  .selbar{position:fixed;left:0;right:0;bottom:56px;z-index:50;background:#182238;border-top:1px solid #2b3450;
+    display:flex;align-items:center;gap:10px;padding:9px 14px;box-shadow:0 -6px 18px rgba(0,0,0,.35)}
+  .selbar #selcount{font-size:12.5px;font-weight:700;color:#cfe0ff}
+  .selbar .btn.arch{background:#2b6fff;border-color:#2b6fff}
   .gtable thead th.gname{z-index:5;background:#111722}
   .gname .t{font-size:11px;font-weight:600;line-height:1.3;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .gname .m{font-size:8.5px;color:var(--sub);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -152,11 +163,18 @@
   <div id="view"></div>
 </div>
 
+<div class="selbar" id="selbar" hidden>
+  <span id="selcount">0件選択中</span>
+  <button class="btn arch" onclick="archiveSel()">📦 アーカイブへ移動</button>
+  <button class="btn" onclick="clearSel()">選択解除</button>
+</div>
+
 <div class="tabs">
   <div class="tab on" data-v="cal" onclick="switchView('cal')"><span class="ic">📅</span>カレンダー</div>
   <div class="tab" data-v="gantt" onclick="switchView('gantt')"><span class="ic">📊</span>ガント</div>
   <div class="tab" data-v="todo" onclick="switchView('todo')"><span class="ic">✅</span>今週</div>
   <div class="tab" data-v="ana" onclick="switchView('ana')"><span class="ic">📈</span>分析</div>
+  <div class="tab" data-v="arch" onclick="switchView('arch')"><span class="ic">📦</span>アーカイブ</div>
 </div>
 
 <div class="ov" id="ov">
@@ -230,7 +248,7 @@ function seed(){
 }
 
 // ===== GitHub同期（端末間・Claude連携）=====
-const BUILD='b15-0826';
+const BUILD='b16-0826';
 const MB_REPO='takpz93/media-board';
 const MB_PATH='data/board.json';
 const __T=[103,105,116,104,117,98,95,112,97,116,95,49,49,67,67,69,83,80,67,81,48,89,104,113,108,87,82,117,97,113,102,115,81,95,113,104,77,54,108,86,112,53,111,122,121,55,117,87,51,88,100,87,99,99,69,122,49,50,66,75,115,105,70,67,82,120,77,81,103,111,106,49,107,118,98,51,103,87,55,81,52,72,87,76,83,54,85,104,122,87,78,81,109];
@@ -344,7 +362,9 @@ function render(){
   if(VIEW==='cal')v.innerHTML=vCal();
   else if(VIEW==='gantt')v.innerHTML=vGantt();
   else if(VIEW==='todo')v.innerHTML=vTodo();
+  else if(VIEW==='arch')v.innerHTML=vArch();
   else v.innerHTML=vAna();
+  updateSelBar();
 }
 // calendar
 function vCal(){
@@ -368,7 +388,7 @@ function calMonth(y,mo){
     const ds=`${y}-${pad(mo+1)}-${pad(dd)}`;
     const today=ds===TODAYS?' today':'';
     let inner=`<span class="dn">${dd}</span>`;
-    DATA.filter(it=>it.date===ds).forEach(it=>{
+    DATA.filter(it=>it.date===ds && !it.archived).forEach(it=>{
       const dn=isDone(it);
       const col=dn?'#6b7688':TRACKS[it.track].color; // 投稿済み/完成はグレー
       const late=(!dn && daysTo(ds)<0)?' late':'';
@@ -401,7 +421,7 @@ function ensureSched(it){
 function addDaysStr(ds,n){const d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+n);return ymd(d);}
 function vGantt(){
   // 対象：日付あり ＆（未完 or 直近3日以内に投稿）… 過去の投稿済みは隠す
-  const rows=DATA.filter(it=>it.date && (!isDone(it) || daysTo(it.date)>=-3));
+  const rows=DATA.filter(it=>it.date && !it.archived && (!isDone(it) || daysTo(it.date)>=-3));
   let sched=false;
   rows.forEach(it=>{const before=JSON.stringify(it.sched||{});ensureSched(it);if(JSON.stringify(it.sched)!==before)sched=true;});
   if(sched)save(false); // 自動割当を保存（クラウド更新は次のユーザー操作時）
@@ -425,8 +445,9 @@ function vGantt(){
     const T=TRACKS[it.track],st=stagesOf(it);
     const late=(!isDone(it) && daysTo(it.date)<0);
     const dl=`${Number(it.date.slice(5,7))}/${Number(it.date.slice(8,10))}`;
-    let r=`<td class="gname" onclick="openModal('${it.id}')"><div class="t"><span class="dot" style="background:${T.color}"></span>${esc(it.title)}</div>`+
-      `<div class="m${late?' late':''}">${late?'⚠ ':''}${T.name}・${curLabel2(it)}・締${dl}</div></td>`;
+    let r=`<td class="gname"><label class="gselbox" onclick="event.stopPropagation()"><input type="checkbox" ${gSel.has(it.id)?'checked':''} onclick="toggleSel('${it.id}',this.checked)"></label>`+
+      `<span class="gnmwrap" onclick="openModal('${it.id}')"><span class="t"><span class="dot" style="background:${T.color}"></span>${esc(it.title)}</span>`+
+      `<span class="m${late?' late':''}">${late?'⚠ ':''}${T.name}・${curLabel2(it)}・締${dl}</span></span></td>`;
     days.forEach(ds=>{
       const dt=new Date(ds+'T00:00:00');const w=dt.getDay();const cls=(ds===TODAYS?'today':(w===0||w===6?'wend':''));
       let cell='';
@@ -448,7 +469,7 @@ function vGantt(){
     `<span class="lg"><span class="sw" style="outline:1.5px solid #ff5d5d;background:#ff5d5d33"></span>赤枠＝期限超過</span>`+
     `<span>／バッジをタップ＝日付変更・進捗（メニュー）／ドラッグでも日付移動／名前タップ＝編集</span></div>`;
   // 日付なし/候補
-  const nod=DATA.filter(it=>!it.date && it.cur>=-1 && (!isDone(it)));
+  const nod=DATA.filter(it=>!it.date && !it.archived && it.cur>=-1 && (!isDone(it)));
   let extra='';
   if(nod.length){extra=`<div class="grp" style="margin-top:14px">🗂 日付未定・候補</div>`;
     nod.forEach(it=>extra+=card(it));}
@@ -457,6 +478,27 @@ function vGantt(){
 function curLabel2(it){const st=stagesOf(it);if(it.cur<0)return '未着手';if(isDone(it))return TRACKS[it.track].type==='completion'?'完成✓':'投稿済✓';return st[it.cur];}
 function touch(it){if(it)it._u=Date.now();return it;}
 function setProgress(id,idx){const it=DATA.find(x=>x.id===id);if(!it)return;it.cur=(it.cur===idx?idx-1:idx);touch(it);save();render();}
+// ===== 選択＆アーカイブ（youtube-schedule同様）=====
+const gSel=new Set();
+function toggleSel(id,on){ if(on)gSel.add(id); else gSel.delete(id); updateSelBar(); }
+function updateSelBar(){ const b=document.getElementById('selbar'); if(!b)return; const n=gSel.size; b.hidden=(n===0); const c=document.getElementById('selcount'); if(c)c.textContent=n+'件選択中'; }
+function clearSel(){ gSel.clear(); render(); }
+function archiveSel(){ if(!gSel.size)return; if(!confirm(gSel.size+'件をアーカイブに移動しますか？（他のビューには表示されなくなります）'))return; const t=Date.now(); DATA.forEach(it=>{ if(gSel.has(it.id)){ it.archived=true; it.archivedAt=t; touch(it); } }); gSel.clear(); save(); render(); }
+function unarchive(id){ const it=DATA.find(x=>x.id===id); if(it){ it.archived=false; it.archivedAt=null; touch(it); save(); render(); } }
+function purgeItem(id){ if(confirm('この項目を完全に削除しますか？（元に戻せません）')){ DATA=DATA.filter(x=>x.id!==id); gSel.delete(id); save(); render(); } }
+function vArch(){
+  const arr=DATA.filter(it=>it.archived).sort((a,b)=>(b.archivedAt||0)-(a.archivedAt||0));
+  if(!arr.length)return `<div class="hint">📦 アーカイブは空です。<br>ガントや候補カードの左のチェックを付けて、下の「📦 アーカイブへ移動」を押すと、ここに移動します（他のビューには表示されません）。いつでも「↩ 戻す」で復活できます。</div>`;
+  let out=`<div class="grp">📦 アーカイブ（${arr.length}件）</div>`;
+  arr.forEach(it=>{
+    const T=TRACKS[it.track]||{name:'',color:'#888'};
+    const dl=it.date?`${Number(it.date.slice(5,7))}/${Number(it.date.slice(8,10))}`:'日付未定';
+    out+=`<div class="arow"><div class="nm"><span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${T.color};margin-right:6px"></span>${esc(it.title)}</span><span style="color:var(--sub);font-weight:400">${T.name}・${dl}</span></div>`
+      +`<div style="display:flex;gap:6px;margin-top:9px"><button class="btn" onclick="unarchive('${it.id}')">↩ 戻す</button>`
+      +`<button class="btn" onclick="purgeItem('${it.id}')" style="color:var(--danger);border-color:#5a2a2a">🗑 完全に削除</button></div></div>`;
+  });
+  return out;
+}
 // ガントの工程バッジを別の日にドラッグ＝その工程の日付を変更（タップは進捗更新）
 function setStageDate(id,i,nd){const it=DATA.find(x=>x.id===id);if(!it)return;it.sched=it.sched||{};nd=nd||'';if(it.sched[i]===nd)return;it.sched[i]=nd;touch(it);save();render();}
 let gDrag=null,gLastCell=null;
@@ -522,16 +564,19 @@ function initGanttDrag(){
 function card(it){
   const late=(it.date && !isDone(it) && daysTo(it.date)<0);
   const dlabel=it.date?`${Number(it.date.slice(5,7))}/${Number(it.date.slice(8,10))}`:(it.cur<0?'候補':'日付未定');
-  return `<div class="pipe" onclick="openModal('${it.id}')">
-    <div class="ph"><div class="ttl">${esc(it.title)}</div><div class="pub${late?' late':''}">${late?'⚠ ':''}${dlabel}</div></div>
+  return `<div class="pipe">
+    <label class="cardsel" onclick="event.stopPropagation()"><input type="checkbox" ${gSel.has(it.id)?'checked':''} onclick="toggleSel('${it.id}',this.checked)"></label>
+    <div onclick="openModal('${it.id}')">
+    <div class="ph"><div class="ttl" style="padding-right:22px">${esc(it.title)}</div><div class="pub${late?' late':''}">${late?'⚠ ':''}${dlabel}</div></div>
     <div class="cur">${curLabel(it)}</div>${progBar(it)}
     ${it.note?`<div class="note">📝 ${esc(it.note)}</div>`:''}
     ${!isDone(it)?`<div class="adv" onclick="event.stopPropagation();advance('${it.id}')">▶ 次の工程へ進める</div>`:''}
+    </div>
   </div>`;
 }
 // todo (this week)
 function vTodo(){
-  const items=DATA.filter(it=>it.date && !isDone(it)).map(it=>({it,dt:daysTo(it.date)}))
+  const items=DATA.filter(it=>it.date && !it.archived && !isDone(it)).map(it=>({it,dt:daysTo(it.date)}))
     .filter(x=>x.dt<=7).sort((a,b)=>a.dt-b.dt);
   if(!items.length)return `<div class="hint">今週(7日以内)に締切の未完タスクはありません 🎉</div>`;
   let out=`<div class="grp">✅ 今週やること（7日以内・未完）</div>`;
@@ -547,16 +592,17 @@ function vTodo(){
 }
 // analytics
 function vAna(){
-  const doneAll=DATA.filter(isDone).length;
-  const wip=DATA.filter(it=>it.cur>=0&&!isDone(it)).length;
-  const idea=DATA.filter(it=>it.cur<0).length;
+  const A=DATA.filter(it=>!it.archived);
+  const doneAll=A.filter(isDone).length;
+  const wip=A.filter(it=>it.cur>=0&&!isDone(it)).length;
+  const idea=A.filter(it=>it.cur<0).length;
   let out=`<div class="kpis">
     <div class="kpi"><div class="n">${doneAll}</div><div class="l">完了・投稿済</div></div>
     <div class="kpi"><div class="n">${wip}</div><div class="l">制作中</div></div>
     <div class="kpi"><div class="n">${idea}</div><div class="l">候補</div></div></div>`;
   out+=`<div class="grp">📈 チャンネル別</div>`;
   Object.keys(TRACKS).forEach(tk=>{
-    const items=DATA.filter(it=>it.track===tk);if(!items.length)return;
+    const items=A.filter(it=>it.track===tk);if(!items.length)return;
     const d=items.filter(isDone).length,w=items.filter(it=>it.cur>=0&&!isDone(it)).length,i=items.filter(it=>it.cur<0).length;
     const tot=items.length,col=TRACKS[tk].color;
     out+=`<div class="arow"><div class="nm"><span>${TRACKS[tk].name}</span><span style="color:var(--sub);font-weight:400">全${tot}件</span></div>
