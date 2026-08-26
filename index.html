@@ -169,13 +169,17 @@
 <script>
 // ===== トラック定義 =====
 const STAGES={
-  semi:["企画決め","初稿確認","完成","タイトル決め","コード指示文","投稿予約","投稿済み"],
+  semi:["企画立案","チェック","完了","投稿予約","投稿済"],
   x:["下書き","投稿"],
   diary:["執筆","投稿"],
-  miura:["企画","撮影","素材並べ","1次カット","2次カット・仮テロップ","3次カット","インサート・装飾","チェック","完成","サムネ","タイトル","提出","投稿予約","投稿"],
-  ronin:["撮影","素材並べ","カット","テロップ","完成","サムネ","タイトル","投稿予約","投稿"],
+  miura:["企画","撮影","素材並べ","1次カット","2次カット","3次カット・テロップ・装飾","チェック","完成","サムネ・タイトル","投稿予約","投稿済み"],
+  ronin:["英訳","完成","サムネ・タイトル","投稿予約","投稿済"],
   oha:["素材選び","カット","編集・テロップ","完成"],
 };
+const VLOG_STAGES=["完成","サムネ・タイトル","投稿予約","投稿済"];
+// みうらくん内で「vlog」を含む項目は専用工程。それ以外はトラック標準。
+function stagesFor(track,title){return (track==='miura' && /vlog/i.test(title||''))?VLOG_STAGES:(STAGES[track]||[]);}
+function stagesOf(it){return stagesFor(it.track,it.title);}
 const TRACKS={
   semi:{name:"半導体note",color:"#4c8dff",type:"publish"},
   x:{name:"半導体X",color:"#38bdf8",type:"publish"},
@@ -216,7 +220,7 @@ function seed(){
 }
 
 // ===== GitHub同期（端末間・Claude連携）=====
-const BUILD='b8-0826';
+const BUILD='b9-0826';
 const MB_REPO='takpz93/media-board';
 const MB_PATH='data/board.json';
 const __T=[103,105,116,104,117,98,95,112,97,116,95,49,49,67,67,69,83,80,67,81,48,89,104,113,108,87,82,117,97,113,102,115,81,95,113,104,77,54,108,86,112,53,111,122,121,55,117,87,51,88,100,87,99,99,69,122,49,50,66,75,115,105,70,67,82,120,77,81,103,111,106,49,107,118,98,51,103,87,55,81,52,72,87,76,83,54,85,104,122,87,78,81,109];
@@ -286,18 +290,18 @@ const pad=n=>String(n).padStart(2,'0');
 function ymd(dt){return dt.getFullYear()+'-'+pad(dt.getMonth()+1)+'-'+pad(dt.getDate());}
 const TODAY=new Date();TODAY.setHours(0,0,0,0);
 const TODAYS=ymd(TODAY);
-function isDone(it){return it.cur>=last(it.track);}
+function isDone(it){return it.cur>=(stagesOf(it).length-1);}
 function daysTo(ds){if(!ds)return null;const d=new Date(ds+'T00:00:00');return Math.round((d-TODAY)/86400000);}
 function esc(s){return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 
 // ===== progress bar =====
 function progBar(it){
-  const st=STAGES[it.track];let s='';const dn=isDone(it);
+  const st=stagesOf(it);let s='';const dn=isDone(it);
   st.forEach((_,i)=>{let c=dn?'done':(it.cur<0?'':(i<it.cur?'done':(i===it.cur?'cur':'')));s+=`<div class="seg ${c}"></div>`;});
   return `<div class="prog">${s}</div>`;
 }
 function curLabel(it){
-  const st=STAGES[it.track];
+  const st=stagesOf(it);
   if(it.cur<0)return '<span class="ok" style="color:var(--sub)">未着手</span>';
   if(isDone(it))return `<span class="ok">${TRACKS[it.track].type==='completion'?'完成 ✓':'投稿済み ✓'}</span>`;
   return `現在：<b>${st[it.cur]}</b>`;
@@ -352,7 +356,7 @@ function stageAbbr(name){const n=name.replace(/決め|確認|指示文|予約|�
 // 各工程に日付を自動割当（投稿日から1日ずつ逆算）。無ければ空。
 function ensureSched(it){
   if(it.sched && typeof it.sched==='object' && Object.keys(it.sched).length)return it.sched;
-  const st=STAGES[it.track];const s={};
+  const st=stagesOf(it);const s={};
   if(it.date){
     const base=new Date(it.date+'T00:00:00');
     for(let i=st.length-1;i>=0;i--){const d=new Date(base);d.setDate(base.getDate()-(st.length-1-i));s[i]=ymd(d);}
@@ -383,7 +387,7 @@ function vGantt(){
   rows.sort((a,b)=>a.date<b.date?-1:(a.date>b.date?1:0));
   let body='';
   rows.forEach(it=>{
-    const T=TRACKS[it.track],st=STAGES[it.track];
+    const T=TRACKS[it.track],st=stagesOf(it);
     const late=(!isDone(it) && daysTo(it.date)<0);
     const dl=`${Number(it.date.slice(5,7))}/${Number(it.date.slice(8,10))}`;
     let r=`<td class="gname" onclick="openModal('${it.id}')"><div class="t"><span class="dot" style="background:${T.color}"></span>${esc(it.title)}</div>`+
@@ -415,7 +419,7 @@ function vGantt(){
     nod.forEach(it=>extra+=card(it));}
   return leg+`<div class="gwrap"><table class="gtable"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`+extra;
 }
-function curLabel2(it){const st=STAGES[it.track];if(it.cur<0)return '未着手';if(isDone(it))return TRACKS[it.track].type==='completion'?'完成✓':'投稿済✓';return st[it.cur];}
+function curLabel2(it){const st=stagesOf(it);if(it.cur<0)return '未着手';if(isDone(it))return TRACKS[it.track].type==='completion'?'完成✓':'投稿済✓';return st[it.cur];}
 function setProgress(id,idx){const it=DATA.find(x=>x.id===id);if(!it)return;it.cur=(it.cur===idx?idx-1:idx);save();render();}
 function card(it){
   const late=(it.date && !isDone(it) && daysTo(it.date)<0);
@@ -434,7 +438,7 @@ function vTodo(){
   if(!items.length)return `<div class="hint">今週(7日以内)に締切の未完タスクはありません 🎉</div>`;
   let out=`<div class="grp">✅ 今週やること（7日以内・未完）</div>`;
   items.forEach(({it,dt})=>{
-    const late=dt<0;const st=STAGES[it.track];const nx=it.cur<0?st[0]:(st[it.cur+1]||'完了');
+    const late=dt<0;const st=stagesOf(it);const nx=it.cur<0?st[0]:(st[it.cur+1]||'完了');
     out+=`<div class="todoi${late?' late':''}" onclick="openModal('${it.id}')">
       <div class="ph"><div class="ttl">${esc(it.title)}</div>
         <div class="d${late?' late':''}">${late?`${-dt}日超過`:dt===0?'今日':`あと${dt}日`}</div></div>
@@ -471,7 +475,7 @@ function vAna(){
 
 // ===== interactions =====
 function switchView(v){VIEW=v;document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.v===v));render();}
-function advance(id){const it=DATA.find(x=>x.id===id);if(!it)return;if(it.cur<last(it.track))it.cur++;save();render();}
+function advance(id){const it=DATA.find(x=>x.id===id);if(!it)return;if(it.cur<(stagesOf(it).length-1))it.cur++;save();render();}
 
 let editId=null;
 function openModal(id){
@@ -488,17 +492,18 @@ function openModal(id){
   fillStages(tsel.value,it?it.cur:-1);
   renderSched(tsel.value, it?it.sched:null, it?it.date:'');
   tsel.onchange=()=>{fillStages(tsel.value,-1);renderSched(tsel.value,null,document.getElementById('f_date').value);};
+  document.getElementById('f_title').oninput=()=>{fillStages(tsel.value,parseInt(document.getElementById('f_cur').value,10)||-1);};
   document.getElementById('ov').classList.add('on');
 }
 function fillStages(tk,cur){
   const cs=document.getElementById('f_cur');
   let o=`<option value="-1">未着手</option>`;
-  STAGES[tk].forEach((s,i)=>o+=`<option value="${i}">${i+1}. ${s}</option>`);
+  stagesFor(tk,(document.getElementById('f_title')||{}).value||'').forEach((s,i)=>o+=`<option value="${i}">${i+1}. ${s}</option>`);
   cs.innerHTML=o;cs.value=String(cur);
 }
-function autoSched(tk,dateStr){const st=STAGES[tk];const s={};if(dateStr){const base=new Date(dateStr+'T00:00:00');for(let i=st.length-1;i>=0;i--){const d=new Date(base);d.setDate(base.getDate()-(st.length-1-i));s[i]=ymd(d);}}return s;}
+function autoSched(tk,dateStr){const st=stagesFor(tk,(document.getElementById('f_title')||{}).value||'');const s={};if(dateStr){const base=new Date(dateStr+'T00:00:00');for(let i=st.length-1;i>=0;i--){const d=new Date(base);d.setDate(base.getDate()-(st.length-1-i));s[i]=ymd(d);}}return s;}
 function renderSched(tk,schedObj,dateStr){
-  const box=document.getElementById('f_sched');const st=STAGES[tk];
+  const box=document.getElementById('f_sched');const st=stagesFor(tk,(document.getElementById('f_title')||{}).value||'');
   const s=(schedObj&&Object.keys(schedObj).length)?schedObj:autoSched(tk,dateStr);
   box.innerHTML=st.map((nm,i)=>`<div class="schedrow"><span class="sn"><span class="ci" style="background:${stageColor(tk,i)}"></span>${i+1}. ${esc(nm)}</span><input type="date" id="sc_${i}" value="${s[i]||''}"></div>`).join('')
     +`<button type="button" class="btn" style="margin-top:4px" onclick="autoFillSched()">↻ 投稿日から自動再計算</button>`;
@@ -507,7 +512,7 @@ function autoFillSched(){const tk=document.getElementById('f_track').value;const
 function closeModal(){document.getElementById('ov').classList.remove('on');editId=null;}
 function saveModal(){
   const tk=document.getElementById('f_track').value;
-  const st=STAGES[tk];const sched={};st.forEach((_,i)=>{const el=document.getElementById('sc_'+i);if(el&&el.value)sched[i]=el.value;});
+  const st=stagesFor(tk,(document.getElementById('f_title')||{}).value||'');const sched={};st.forEach((_,i)=>{const el=document.getElementById('sc_'+i);if(el&&el.value)sched[i]=el.value;});
   const obj={track:tk,title:document.getElementById('f_title').value.trim()||'(無題)',
     date:document.getElementById('f_date').value,cur:parseInt(document.getElementById('f_cur').value,10),
     note:document.getElementById('f_note').value.trim(),sched:sched};
