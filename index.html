@@ -72,7 +72,9 @@
   .gcell.today{background:rgba(80,130,255,.08)}
   .gcell.wend{background:rgba(255,255,255,.018)}
   .gbadge{display:inline-block;font-size:8.5px;font-weight:800;border-radius:4px;padding:2px 0;
-    width:26px;line-height:1.25;cursor:pointer;color:#0d1017;letter-spacing:-.2px}
+    width:26px;line-height:1.25;cursor:grab;color:#0d1017;letter-spacing:-.2px;touch-action:none;user-select:none}
+  .gbadge.gdragging{opacity:.45;cursor:grabbing}
+  .gcell.gdrop{outline:2px dashed #6ea8ff;outline-offset:-2px}
   .gbadge+.gbadge{margin-top:2px}
   .gbadge.future{color:inherit;background:transparent!important}
   .gbadge.late{outline:1.6px solid var(--danger);outline-offset:-1px}
@@ -220,7 +222,7 @@ function seed(){
 }
 
 // ===== GitHub同期（端末間・Claude連携）=====
-const BUILD='b12-0826';
+const BUILD='b13-0826';
 const MB_REPO='takpz93/media-board';
 const MB_PATH='data/board.json';
 const __T=[103,105,116,104,117,98,95,112,97,116,95,49,49,67,67,69,83,80,67,81,48,89,104,113,108,87,82,117,97,113,102,115,81,95,113,104,77,54,108,86,112,53,111,122,121,55,117,87,51,88,100,87,99,99,69,122,49,50,66,75,115,105,70,67,82,120,77,81,103,111,106,49,107,118,98,51,103,87,55,81,52,72,87,76,83,54,85,104,122,87,78,81,109];
@@ -425,9 +427,9 @@ function vGantt(){
         const od=(!done && ds<TODAYS);
         const col=stageColor(it.track,i);
         const style=done?`background:#868d99;color:#141821`:`border:1.4px solid ${col};color:${col}`;
-        cell+=`<span class="gbadge${done?'':' future'}${od?' late':''}" style="${style}" title="${esc(nm)}（${ds}）" onclick="setProgress('${it.id}',${i})">${esc(stageAbbr(nm))}</span>`;
+        cell+=`<span class="gbadge${done?'':' future'}${od?' late':''}" style="${style}" title="${esc(nm)}（${ds}）／ドラッグで日付変更・タップで進捗" data-id="${it.id}" data-i="${i}">${esc(stageAbbr(nm))}</span>`;
       }});
-      r+=`<td class="gcell ${cls}">${cell}</td>`;
+      r+=`<td class="gcell ${cls}" data-date="${ds}">${cell}</td>`;
     });
     body+=`<tr>${r}</tr>`;
   });
@@ -436,7 +438,7 @@ function vGantt(){
     `<span class="lg"><span class="sw" style="background:#868d99"></span>グレー＝完了</span>`+
     `<span class="lg"><span class="sw" style="border:1.4px solid #8fb8ff"></span>枠＝これから</span>`+
     `<span class="lg"><span class="sw" style="outline:1.5px solid #ff5d5d;background:#ff5d5d33"></span>赤枠＝期限超過</span>`+
-    `<span>／セルをタップで進捗更新・左の名前をタップで編集</span></div>`;
+    `<span>／バッジを別の日にドラッグ＝日付変更・タップ＝進捗更新・名前タップ＝編集</span></div>`;
   // 日付なし/候補
   const nod=DATA.filter(it=>!it.date && it.cur>=-1 && (!isDone(it)));
   let extra='';
@@ -447,6 +449,41 @@ function vGantt(){
 function curLabel2(it){const st=stagesOf(it);if(it.cur<0)return '未着手';if(isDone(it))return TRACKS[it.track].type==='completion'?'完成✓':'投稿済✓';return st[it.cur];}
 function touch(it){if(it)it._u=Date.now();return it;}
 function setProgress(id,idx){const it=DATA.find(x=>x.id===id);if(!it)return;it.cur=(it.cur===idx?idx-1:idx);touch(it);save();render();}
+// ガントの工程バッジを別の日にドラッグ＝その工程の日付を変更（タップは進捗更新）
+function setStageDate(id,i,nd){const it=DATA.find(x=>x.id===id);if(!it||!nd)return;it.sched=it.sched||{};if(it.sched[i]===nd)return;it.sched[i]=nd;touch(it);save();render();}
+let gDrag=null,gLastCell=null;
+function gDown(e){
+  const b=e.target&&e.target.closest?e.target.closest('.gbadge'):null; if(!b)return;
+  const id=b.getAttribute('data-id'),i=parseInt(b.getAttribute('data-i'),10);
+  if(!id||isNaN(i))return;
+  gDrag={id,i,x:e.clientX,y:e.clientY,moved:false,el:b};
+}
+function gMove(e){
+  if(!gDrag)return;
+  if(!gDrag.moved && (Math.abs(e.clientX-gDrag.x)>6||Math.abs(e.clientY-gDrag.y)>6)){gDrag.moved=true;gDrag.el.classList.add('gdragging');}
+  if(gDrag.moved){
+    e.preventDefault&&e.preventDefault();
+    const t=document.elementFromPoint(e.clientX,e.clientY);
+    const cell=t&&t.closest?t.closest('.gcell[data-date]'):null;
+    if(cell!==gLastCell){ if(gLastCell)gLastCell.classList.remove('gdrop'); gLastCell=cell; if(cell)cell.classList.add('gdrop'); }
+  }
+}
+function gUp(e){
+  if(!gDrag)return; const d=gDrag; gDrag=null;
+  d.el.classList.remove('gdragging');
+  if(gLastCell){gLastCell.classList.remove('gdrop');}
+  const lc=gLastCell; gLastCell=null;
+  if(!d.moved){ setProgress(d.id,d.i); return; }        // タップ＝進捗
+  const cell=lc||(function(){const t=document.elementFromPoint(e.clientX,e.clientY);return t&&t.closest?t.closest('.gcell[data-date]'):null;})();
+  if(cell){ setStageDate(d.id,d.i,cell.getAttribute('data-date')); }  // ドラッグ＝日付変更
+}
+function initGanttDrag(){
+  const v=document.getElementById('view'); if(!v||v.__gd)return; v.__gd=1;
+  v.addEventListener('pointerdown',gDown);
+  document.addEventListener('pointermove',gMove,{passive:false});
+  document.addEventListener('pointerup',gUp);
+  document.addEventListener('pointercancel',()=>{if(gDrag){gDrag.el.classList.remove('gdragging');gDrag=null;}if(gLastCell){gLastCell.classList.remove('gdrop');gLastCell=null;}});
+}
 function card(it){
   const late=(it.date && !isDone(it) && daysTo(it.date)<0);
   const dlabel=it.date?`${Number(it.date.slice(5,7))}/${Number(it.date.slice(8,10))}`:(it.cur<0?'候補':'日付未定');
@@ -561,7 +598,7 @@ function doImport(e){
 }
 
 document.addEventListener('click',function(e){var t=e.target;if(t&&t.tagName==='INPUT'&&t.type==='date'&&typeof t.showPicker==='function'){try{t.showPicker();}catch(_){}}});
-load();render();initCloud();
+load();render();initCloud();initGanttDrag();
 </script>
 </body>
 </html>
