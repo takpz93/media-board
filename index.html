@@ -230,7 +230,7 @@ function seed(){
 }
 
 // ===== GitHub同期（端末間・Claude連携）=====
-const BUILD='b14-0826';
+const BUILD='b15-0826';
 const MB_REPO='takpz93/media-board';
 const MB_PATH='data/board.json';
 const __T=[103,105,116,104,117,98,95,112,97,116,95,49,49,67,67,69,83,80,67,81,48,89,104,113,108,87,82,117,97,113,102,115,81,95,113,104,77,54,108,86,112,53,111,122,121,55,117,87,51,88,100,87,99,99,69,122,49,50,66,75,115,105,70,67,82,120,77,81,103,111,106,49,107,118,98,51,103,87,55,81,52,72,87,76,83,54,85,104,122,87,78,81,109];
@@ -408,7 +408,7 @@ function vGantt(){
   if(!rows.length)return `<div class="glegend"></div><div class="gempty">日付つきの制作中タスクがありません。カード（📅カレンダー/＋追加）で日付を入れると、ここに横棒で並びます。</div>`;
   // 表示レンジ
   let mn=null,mx=null;
-  rows.forEach(it=>Object.values(it.sched).forEach(d=>{if(!mn||d<mn)mn=d;if(!mx||d>mx)mx=d;}));
+  rows.forEach(it=>Object.values(it.sched).forEach(d=>{if(!d)return;if(!mn||d<mn)mn=d;if(!mx||d>mx)mx=d;}));
   if(!mn){mn=TODAYS;mx=addDaysStr(TODAYS,14);}
   if(TODAYS<mn)mn=TODAYS; if(TODAYS>mx)mx=TODAYS;
   mn=addDaysStr(mn,-1);mx=addDaysStr(mx,1);
@@ -458,7 +458,7 @@ function curLabel2(it){const st=stagesOf(it);if(it.cur<0)return '未着手';if(i
 function touch(it){if(it)it._u=Date.now();return it;}
 function setProgress(id,idx){const it=DATA.find(x=>x.id===id);if(!it)return;it.cur=(it.cur===idx?idx-1:idx);touch(it);save();render();}
 // ガントの工程バッジを別の日にドラッグ＝その工程の日付を変更（タップは進捗更新）
-function setStageDate(id,i,nd){const it=DATA.find(x=>x.id===id);if(!it||!nd)return;it.sched=it.sched||{};if(it.sched[i]===nd)return;it.sched[i]=nd;touch(it);save();render();}
+function setStageDate(id,i,nd){const it=DATA.find(x=>x.id===id);if(!it)return;it.sched=it.sched||{};nd=nd||'';if(it.sched[i]===nd)return;it.sched[i]=nd;touch(it);save();render();}
 let gDrag=null,gLastCell=null;
 function gDown(e){
   const b=e.target&&e.target.closest?e.target.closest('.gbadge'):null; if(!b)return;
@@ -506,7 +506,7 @@ function openBadgeMenu(id,i,anchorEl){
   let top=r.bottom+6; if(top+180>window.innerHeight)top=Math.max(8,r.top-186);
   pop.style.left=left+'px'; pop.style.top=top+'px';
   const di=document.getElementById('bm_date');
-  di.addEventListener('change',e=>{ if(e.target.value){setStageDate(id,i,e.target.value);} closeBadgeMenu(); });
+  di.addEventListener('change',e=>{ setStageDate(id,i,e.target.value||''); closeBadgeMenu(); });
   document.getElementById('bm_done').onclick=()=>{const x=DATA.find(y=>y.id===id);if(x){x.cur=i;touch(x);save();closeBadgeMenu();render();}};
   document.getElementById('bm_undo').onclick=()=>{const x=DATA.find(y=>y.id===id);if(x){x.cur=Math.max(-1,i-1);touch(x);save();closeBadgeMenu();render();}};
   document.getElementById('bm_close').onclick=closeBadgeMenu;
@@ -610,7 +610,7 @@ function autoFillSched(){const tk=document.getElementById('f_track').value;const
 function closeModal(){document.getElementById('ov').classList.remove('on');editId=null;}
 function saveModal(){
   const tk=document.getElementById('f_track').value;
-  const st=stagesFor(tk,(document.getElementById('f_title')||{}).value||'');const sched={};st.forEach((_,i)=>{const el=document.getElementById('sc_'+i);if(el&&el.value)sched[i]=el.value;});
+  const st=stagesFor(tk,(document.getElementById('f_title')||{}).value||'');const sched={};st.forEach((_,i)=>{const el=document.getElementById('sc_'+i);sched[i]=(el&&el.value)?el.value:'';});
   const obj={track:tk,title:document.getElementById('f_title').value.trim()||'(無題)',
     date:document.getElementById('f_date').value,cur:parseInt(document.getElementById('f_cur').value,10),
     note:document.getElementById('f_note').value.trim(),sched:sched};
