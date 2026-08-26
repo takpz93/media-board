@@ -220,7 +220,7 @@ function seed(){
 }
 
 // ===== GitHub同期（端末間・Claude連携）=====
-const BUILD='b10-0826';
+const BUILD='b11-0826';
 const MB_REPO='takpz93/media-board';
 const MB_PATH='data/board.json';
 const __T=[103,105,116,104,117,98,95,112,97,116,95,49,49,67,67,69,83,80,67,81,48,89,104,113,108,87,82,117,97,113,102,115,81,95,113,104,77,54,108,86,112,53,111,122,121,55,117,87,51,88,100,87,99,99,69,122,49,50,66,75,115,105,70,67,82,120,77,81,103,111,106,49,107,118,98,51,103,87,55,81,52,72,87,76,83,54,85,104,122,87,78,81,109];
@@ -355,8 +355,13 @@ function stageColor(track,i){return STAGE_COLORS[i%STAGE_COLORS.length];}
 function stageAbbr(name){const n=name.replace(/決め|確認|指示文|予約|済み/g,'');return (n||name).slice(0,2);}
 // 各工程に日付を自動割当（投稿日から1日ずつ逆算）。無ければ空。
 function ensureSched(it){
-  if(it.sched && typeof it.sched==='object' && Object.keys(it.sched).length)return it.sched;
-  const st=stagesOf(it);const s={};
+  const st=stagesOf(it);
+  // 既存schedが「工程数と一致」かつ「最終工程＝投稿日」なら尊重（手動調整を保持）
+  if(it.sched && typeof it.sched==='object' && Object.keys(it.sched).length===st.length
+     && (!it.date || it.sched[st.length-1]===it.date)){
+    return it.sched;
+  }
+  const s={};
   if(it.date){
     const base=new Date(it.date+'T00:00:00');
     for(let i=st.length-1;i>=0;i--){const d=new Date(base);d.setDate(base.getDate()-(st.length-1-i));s[i]=ymd(d);}
