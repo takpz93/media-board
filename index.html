@@ -220,7 +220,7 @@ function seed(){
 }
 
 // ===== GitHub同期（端末間・Claude連携）=====
-const BUILD='b11-0826';
+const BUILD='b12-0826';
 const MB_REPO='takpz93/media-board';
 const MB_PATH='data/board.json';
 const __T=[103,105,116,104,117,98,95,112,97,116,95,49,49,67,67,69,83,80,67,81,48,89,104,113,108,87,82,117,97,113,102,115,81,95,113,104,77,54,108,86,112,53,111,122,121,55,117,87,51,88,100,87,99,99,69,122,49,50,66,75,115,105,70,67,82,120,77,81,103,111,106,49,107,118,98,51,103,87,55,81,52,72,87,76,83,54,85,104,122,87,78,81,109];
@@ -237,6 +237,23 @@ async function fetchBoard(){
   const j=await r.json(); remoteSha=j.sha;
   return {obj:JSON.parse(b64dec(j.content))};
 }
+// リモート取り込みは「項目単位マージ」：リモートのスナップショット時刻より後に
+// 手元で編集した項目（_u が新しい）は上書きせず保持する。これにより、他端末や
+// Claude 側の更新が入っても、編集中・編集直後のタスクが消えない。
+function mergeAdopt(remote){
+  const rAt=Date.parse((remote&&remote._meta&&remote._meta.updatedAt)||'')||0;
+  const byId=new Map(DATA.map(it=>[it.id,it]));
+  const out=[]; const seen=new Set(); let keptLocal=false;
+  (remote.data||[]).forEach(rit=>{
+    seen.add(rit.id);
+    const lit=byId.get(rit.id);
+    if(lit && (lit._u||0)>rAt){ out.push(lit); keptLocal=true; }  // リモート反映後に手編集済み→ローカル維持
+    else out.push(rit);
+  });
+  // リモートに無い＝手元で新規追加した項目のうち、スナップショット後に作った物は残す
+  DATA.forEach(lit=>{ if(!seen.has(lit.id) && (lit._u||0)>rAt){ out.push(lit); keptLocal=true; } });
+  return {data:out, keptLocal};
+}
 async function adoptIfNewer(){
   if(pushing||dirty)return;
   try{
@@ -245,9 +262,12 @@ async function adoptIfNewer(){
     const o=res.obj; const rAt=Date.parse((o&&o._meta&&o._meta.updatedAt)||'')||0;
     const lAt=Date.parse((localMeta&&localMeta.updatedAt)||'')||0;
     if(Array.isArray(o.data) && rAt>lAt){
-      applyingRemote=true; DATA=o.data; localMeta=o._meta||{updatedAt:new Date().toISOString()};
+      const m=mergeAdopt(o);
+      applyingRemote=true; DATA=m.data; localMeta=o._meta||{updatedAt:new Date().toISOString()};
       try{localStorage.setItem('mediaBoard_v2',JSON.stringify(DATA));localStorage.setItem('mediaBoard_meta',JSON.stringify(localMeta));}catch(e){}
       render(); applyingRemote=false;
+      // ローカル編集を守った場合は、その内容をサーバーへ戻して整合させる
+      if(m.keptLocal){ cloudSave(); }
     }
     setBadge('☁️同期');
   }catch(e){ setBadge('⚠同期エラー'); }
@@ -356,9 +376,9 @@ function stageAbbr(name){const n=name.replace(/決め|確認|指示文|予約|�
 // 各工程に日付を自動割当（投稿日から1日ずつ逆算）。無ければ空。
 function ensureSched(it){
   const st=stagesOf(it);
-  // 既存schedが「工程数と一致」かつ「最終工程＝投稿日」なら尊重（手動調整を保持）
-  if(it.sched && typeof it.sched==='object' && Object.keys(it.sched).length===st.length
-     && (!it.date || it.sched[st.length-1]===it.date)){
+  // 既存schedが工程数と一致していれば、手編集を尊重してそのまま使う（絶対に上書きしない）。
+  // 工程数が合わない古い形式のときだけ、投稿日から逆算して作り直す。
+  if(it.sched && typeof it.sched==='object' && Object.keys(it.sched).length===st.length){
     return it.sched;
   }
   const s={};
@@ -425,7 +445,8 @@ function vGantt(){
   return leg+`<div class="gwrap"><table class="gtable"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`+extra;
 }
 function curLabel2(it){const st=stagesOf(it);if(it.cur<0)return '未着手';if(isDone(it))return TRACKS[it.track].type==='completion'?'完成✓':'投稿済✓';return st[it.cur];}
-function setProgress(id,idx){const it=DATA.find(x=>x.id===id);if(!it)return;it.cur=(it.cur===idx?idx-1:idx);save();render();}
+function touch(it){if(it)it._u=Date.now();return it;}
+function setProgress(id,idx){const it=DATA.find(x=>x.id===id);if(!it)return;it.cur=(it.cur===idx?idx-1:idx);touch(it);save();render();}
 function card(it){
   const late=(it.date && !isDone(it) && daysTo(it.date)<0);
   const dlabel=it.date?`${Number(it.date.slice(5,7))}/${Number(it.date.slice(8,10))}`:(it.cur<0?'候補':'日付未定');
@@ -521,8 +542,8 @@ function saveModal(){
   const obj={track:tk,title:document.getElementById('f_title').value.trim()||'(無題)',
     date:document.getElementById('f_date').value,cur:parseInt(document.getElementById('f_cur').value,10),
     note:document.getElementById('f_note').value.trim(),sched:sched};
-  if(editId){Object.assign(DATA.find(x=>x.id===editId),obj);}
-  else{obj.id='i'+Date.now()+Math.floor(Math.random()*1000);DATA.push(obj);}
+  if(editId){touch(Object.assign(DATA.find(x=>x.id===editId),obj));}
+  else{obj.id='i'+Date.now()+Math.floor(Math.random()*1000);touch(obj);DATA.push(obj);}
   save();closeModal();render();
 }
 function delItem(){if(editId&&confirm('この項目を削除しますか？')){DATA=DATA.filter(x=>x.id!==editId);save();closeModal();render();}}
