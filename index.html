@@ -332,6 +332,8 @@ let DATA=[];
 function load(){try{const r=localStorage.getItem('mediaBoard_v2');DATA=r?JSON.parse(r):seed();}catch(e){DATA=seed();}}
 function save(push){try{localStorage.setItem('mediaBoard_v2',JSON.stringify(DATA));}catch(e){}if(push!==false)cloudSave();}
 let VIEW='cal';
+const CAL_BACK=3;   // カレンダーで遡って表示する月数
+let calJump=true;   // 次のカレンダー描画で今月位置へスクロールするか
 
 // ===== helpers =====
 const pad=n=>String(n).padStart(2,'0');
@@ -359,7 +361,13 @@ function curLabel(it){
 function render(){
   document.getElementById('subttl').textContent=`今日 ${TODAYS}／自メディア6ch・タップで編集・自動保存 ・build ${BUILD}`;
   const v=document.getElementById('view');
-  if(VIEW==='cal')v.innerHTML=vCal();
+  if(VIEW==='cal'){
+    v.innerHTML=vCal();
+    if(calJump){
+      calJump=false;
+      requestAnimationFrame(()=>{const n=document.getElementById('calNow');if(n)n.scrollIntoView({block:'start'});});
+    }
+  }
   else if(VIEW==='gantt')v.innerHTML=vGantt();
   else if(VIEW==='todo')v.innerHTML=vTodo();
   else if(VIEW==='arch')v.innerHTML=vArch();
@@ -369,13 +377,14 @@ function render(){
 // calendar
 function vCal(){
   let out='';
-  const m0=new Date(TODAY.getFullYear(),TODAY.getMonth(),1);
-  for(let k=0;k<2;k++){
+  // 過去3ヶ月＋今月＋来月。初期表示は今月にスクロールで合わせる（上へスクロールで過去を見る）
+  const m0=new Date(TODAY.getFullYear(),TODAY.getMonth()-CAL_BACK,1);
+  for(let k=0;k<CAL_BACK+2;k++){
     const y=m0.getFullYear(),mo=m0.getMonth();
     out+=calMonth(y,mo);
     m0.setMonth(mo+1);
   }
-  out+=`<div class="hint">📅 日付を持つ項目を表示。チップをタップで編集。赤枠＝期限超過で未完。</div>`;
+  out+=`<div class="hint">📅 日付を持つ項目を表示。チップをタップで編集。赤枠＝期限超過で未完。上にスクロールで過去3ヶ月。</div>`;
   return out;
 }
 function calMonth(y,mo){
@@ -397,7 +406,8 @@ function calMonth(y,mo){
     });
     c+=`<div class="cald${today}">${inner}</div>`;
   }
-  return `<div class="cal"><div class="calh">${y}年 ${mo+1}月</div><div class="calgrid">${c}</div></div>`;
+  const isNow=(y===TODAY.getFullYear()&&mo===TODAY.getMonth())?' id="calNow"':'';
+  return `<div class="cal"${isNow}><div class="calh">${y}年 ${mo+1}月</div><div class="calgrid">${c}</div></div>`;
 }
 // ===== gantt timeline (横タイムライン) =====
 const STAGE_COLORS=['#f4b740','#38bdf8','#a78bfa','#37c98b','#2b6fff','#22c55e','#e5484d','#ec4899','#14b8a6','#eab308','#8b5cf6','#f97316','#06b6d4','#ef4444'];
@@ -618,7 +628,7 @@ function vAna(){
 }
 
 // ===== interactions =====
-function switchView(v){VIEW=v;document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.v===v));render();}
+function switchView(v){if(v==='cal'&&VIEW!=='cal')calJump=true;VIEW=v;document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.v===v));render();}
 function advance(id){const it=DATA.find(x=>x.id===id);if(!it)return;if(it.cur<(stagesOf(it).length-1))it.cur++;save();render();}
 
 let editId=null;
