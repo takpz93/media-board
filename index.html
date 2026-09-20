@@ -146,6 +146,39 @@
   .hint{font-size:10.5px;color:var(--sub);margin-top:10px;line-height:1.5;background:var(--panel2);
     border:1px solid var(--line);border-radius:8px;padding:9px 11px}
   input[type=file]{display:none}
+  /* modal tabs (基本 / 実測) */
+  .mtabs{display:flex;gap:6px;margin:0 0 12px}
+  .mtab{flex:1;text-align:center;font-size:12px;font-weight:600;color:var(--sub);background:var(--panel2);
+    border:1px solid var(--line);border-radius:8px;padding:7px 0;cursor:pointer}
+  .mtab.on{color:#cfe0ff;background:#213251;border-color:#2b6fff}
+  /* perf editor grid */
+  .pgrid{display:grid;grid-template-columns:76px repeat(3,1fr);gap:5px;align-items:center}
+  .pgrid .ph2{font-size:10.5px;color:var(--sub);text-align:center;font-weight:600}
+  .pgrid .pl{font-size:11px;color:var(--txt);white-space:nowrap}
+  .pgrid .pl small{display:block;font-size:9px;color:var(--sub)}
+  .pgrid input{width:100%;background:#0f131c;border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:8px 6px;font-size:13px;font-family:inherit;text-align:right}
+  .pgrid .na{text-align:center;color:#3a4658;font-size:11px}
+  /* perf view table */
+  .ptwrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+  .ptable{border-collapse:collapse;width:100%;min-width:560px;font-size:11.5px}
+  .ptable th{color:var(--sub);font-weight:600;font-size:10.5px;text-align:right;padding:8px 9px;border-bottom:1px solid var(--line);white-space:nowrap;background:#111722}
+  .ptable th .tg{display:block;font-size:9px;color:#6b7688;font-weight:500}
+  .ptable th.l,.ptable td.l{text-align:left}
+  .ptable td{padding:8px 9px;border-bottom:1px solid #1e2634;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .ptable tr{cursor:pointer}
+  .ptable tr:active td{background:#1b2230}
+  .ptable td.t{max-width:220px;overflow:hidden;text-overflow:ellipsis}
+  .ptable td.t .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .ptable td.t .d{font-size:9.5px;color:var(--sub);margin-left:6px}
+  .ptable td.bad{color:var(--danger);font-weight:700;background:rgba(255,93,93,.09)}
+  .ptable td.none{color:#3f4a5e}
+  /* perf chart */
+  .pchart{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 8px 6px;margin-bottom:12px;position:relative}
+  .pchart svg{width:100%;height:auto;display:block}
+  .pchart .plg{display:flex;gap:12px;font-size:10.5px;color:var(--sub);margin:0 4px 6px}
+  .pchart .plg i{display:inline-block;width:14px;height:2px;vertical-align:middle;margin-right:5px;border-radius:1px}
+  .pchart .plg i.dash{background:repeating-linear-gradient(90deg,var(--danger) 0 3px,transparent 3px 6px);opacity:.8}
+  .ptip{position:absolute;pointer-events:none;background:#0f131c;border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:10.5px;color:var(--txt);white-space:nowrap;display:none;z-index:5}
 </style>
 </head>
 <body>
@@ -173,6 +206,7 @@
   <div class="tab on" data-v="cal" onclick="switchView('cal')"><span class="ic">📅</span>カレンダー</div>
   <div class="tab" data-v="gantt" onclick="switchView('gantt')"><span class="ic">📊</span>ガント</div>
   <div class="tab" data-v="todo" onclick="switchView('todo')"><span class="ic">✅</span>今週</div>
+  <div class="tab" data-v="perf" onclick="switchView('perf')"><span class="ic">📉</span>実測</div>
   <div class="tab" data-v="ana" onclick="switchView('ana')"><span class="ic">📈</span>分析</div>
   <div class="tab" data-v="arch" onclick="switchView('arch')"><span class="ic">📦</span>アーカイブ</div>
 </div>
@@ -180,12 +214,20 @@
 <div class="ov" id="ov">
   <div class="modal">
     <h3 id="mtitle">項目を追加</h3>
+    <div class="mtabs"><span class="mtab on" id="mtab_basic" onclick="modalTab('basic')">基本</span><span class="mtab" id="mtab_perf" onclick="modalTab('perf')">実測</span></div>
+    <div id="mt_basic">
     <div class="fld"><label>チャンネル</label><select id="f_track"></select></div>
     <div class="fld"><label>タイトル</label><input id="f_title" placeholder="例：街ぶら #5"></div>
     <div class="fld"><label>日付（公開日／完成日。未定なら空でOK）</label><input id="f_date" type="date"></div>
     <div class="fld"><label>現在の工程</label><select id="f_cur"></select></div>
     <div class="fld"><label>各工程の日付（自動＝投稿日から逆算／手で調整可）</label><div id="f_sched"></div></div>
     <div class="fld"><label>メモ</label><textarea id="f_note" rows="2"></textarea></div>
+    </div>
+    <div id="mt_perf" hidden>
+      <div class="fld"><label>動画ID（YouTubeのURL末尾 v=）</label><input id="p_vid" placeholder="例：FDqxy_CTQtI" autocomplete="off"></div>
+      <div class="fld"><label>公開後の実測（数値のみ・空欄可）</label><div class="pgrid" id="p_grid"></div></div>
+      <div class="hint">目標ライン：表示回数 20,000／CTR 6.0%／0:30到達率 50%／平均視聴率 20%（d7で判定）。保存は下の「保存」から。</div>
+    </div>
     <div class="mbtns">
       <button class="btn del" id="mdel" onclick="delItem()">削除</button>
       <button class="btn" onclick="closeModal()">キャンセル</button>
@@ -248,7 +290,7 @@ function seed(){
 }
 
 // ===== GitHub同期（端末間・Claude連携）=====
-const BUILD='b16-0826';
+const BUILD='b17-0920';
 const MB_REPO='takpz93/media-board';
 const MB_PATH='data/board.json';
 const __T=[103,105,116,104,117,98,95,112,97,116,95,49,49,67,67,69,83,80,67,81,48,89,104,113,108,87,82,117,97,113,102,115,81,95,113,104,77,54,108,86,112,53,111,122,121,55,117,87,51,88,100,87,99,99,69,122,49,50,66,75,115,105,70,67,82,120,77,81,103,111,106,49,107,118,98,51,103,87,55,81,52,72,87,76,83,54,85,104,122,87,78,81,109];
@@ -371,6 +413,7 @@ function render(){
   else if(VIEW==='gantt')v.innerHTML=vGantt();
   else if(VIEW==='todo')v.innerHTML=vTodo();
   else if(VIEW==='arch')v.innerHTML=vArch();
+  else if(VIEW==='perf')v.innerHTML=vPerf();
   else v.innerHTML=vAna();
   updateSelBar();
 }
@@ -627,12 +670,129 @@ function vAna(){
   return out;
 }
 
+// ===== 実測（公開後パフォーマンス）=====
+// カードの perf = {videoId, h1:{imp,ctr,views,subs}, h24:{...}, d7:{...,ret30,avgPct}}。無いカードは未記録（後方互換）。
+const PERF_WINDOWS=[['h1','1時間後'],['h24','24時間後'],['d7','7日後']];
+const PERF_FIELDS=[['imp','表示回数','imp'],['ctr','CTR','%'],['views','再生数',''],['subs','登録者増',''],['ret30','0:30到達率','%'],['avgPct','平均視聴率','%']];
+const PERF_D7_ONLY={ret30:true,avgPct:true};
+const PERF_TARGET={imp:20000,ctr:6.0,ret30:50,avgPct:20};   // 目標ライン（下回ると赤）
+const PERF_TRACKS={miura:true,ronin:true};   // 実測ビューに出すチャンネル（YouTube）。note/X は対象外
+function modalTab(t){
+  const isP=t==='perf';
+  document.getElementById('mt_basic').hidden=isP;
+  document.getElementById('mt_perf').hidden=!isP;
+  document.getElementById('mtab_basic').classList.toggle('on',!isP);
+  document.getElementById('mtab_perf').classList.toggle('on',isP);
+}
+function pv(perf,w,k){const o=perf&&perf[w];const v=o?o[k]:undefined;return (typeof v==='number'&&isFinite(v))?v:null;}
+function renderPerfEditor(perf){
+  document.getElementById('p_vid').value=(perf&&perf.videoId)||'';
+  let h=`<div></div>`+PERF_WINDOWS.map(([w,l])=>`<div class="ph2">${l}</div>`).join('');
+  PERF_FIELDS.forEach(([k,l,u])=>{
+    h+=`<div class="pl">${l}${u==='%'?'<small>%</small>':''}</div>`;
+    PERF_WINDOWS.forEach(([w])=>{
+      if(PERF_D7_ONLY[k]&&w!=='d7'){h+=`<div class="na">—</div>`;return;}
+      const v=pv(perf,w,k);
+      h+=`<input type="number" inputmode="decimal" step="any" id="p_${w}_${k}" value="${v===null?'':v}" placeholder="—">`;
+    });
+  });
+  document.getElementById('p_grid').innerHTML=h;
+}
+// 入力欄から perf を組み立てる。全部空なら null（perf を持たせない）。
+function readPerfEditor(){
+  const vid=(document.getElementById('p_vid').value||'').trim();
+  const out={}; let any=false;
+  PERF_WINDOWS.forEach(([w])=>{
+    const o={};
+    PERF_FIELDS.forEach(([k])=>{
+      if(PERF_D7_ONLY[k]&&w!=='d7')return;
+      const el=document.getElementById(`p_${w}_${k}`); if(!el)return;
+      const raw=String(el.value||'').trim(); if(raw==='')return;
+      const n=Number(raw); if(!isFinite(n))return;
+      o[k]=n; any=true;
+    });
+    if(Object.keys(o).length)out[w]=o;
+  });
+  if(vid){out.videoId=vid;any=true;}
+  return any?out:null;
+}
+function fmtNum(v,u){if(v===null)return '—';return u==='%'?v.toFixed(1)+'%':v.toLocaleString();}
+function perfItems(){
+  // 公開済み（YouTubeトラックで、投稿済み or 公開日が今日以前）・公開日の新しい順
+  return DATA.filter(it=>!it.archived && it.date && PERF_TRACKS[it.track] && (isDone(it)||it.date<=TODAYS))
+    .sort((a,b)=>(a.date<b.date?1:a.date>b.date?-1:0));
+}
+function vPerf(){
+  const items=perfItems();
+  let out=`<div class="grp">📉 直近10本の維持率（d7）</div>`+perfChart(items);
+  out+=`<div class="grp">📋 公開済み・d7の実測（公開日の新しい順／赤＝目標未達）</div>`;
+  if(!items.length)return out+`<div class="hint">公開済みのカードがありません。</div>`;
+  const cols=[['imp','表示回数','imp'],['ctr','CTR','%'],['ret30','0:30到達率','%'],['avgPct','平均視聴率','%']];
+  out+=`<div class="ptwrap"><table class="ptable"><thead><tr><th class="l">公開日・タイトル</th>`;
+  cols.forEach(([k,l,u])=>{out+=`<th>${l}<span class="tg">目標 ${fmtNum(PERF_TARGET[k],u)}</span></th>`;});
+  out+=`</tr></thead><tbody>`;
+  items.forEach(it=>{
+    const col=TRACKS[it.track].color;
+    out+=`<tr onclick="openModal('${it.id}','perf')"><td class="l t"><span class="dot" style="background:${col}"></span>${esc(it.title)}<span class="d">${it.date.slice(5).replace('-','/')}</span></td>`;
+    cols.forEach(([k,l,u])=>{
+      const v=pv(it.perf,'d7',k);
+      const cls=v===null?'none':(v<PERF_TARGET[k]?'bad':'');
+      out+=`<td class="${cls}">${v===null?'未記録':fmtNum(v,u)}</td>`;
+    });
+    out+=`</tr>`;
+  });
+  out+=`</tbody></table></div>`;
+  out+=`<div class="hint">行をタップで「実測」タブを開いて入力。h1／h24 の値は詳細から確認。未記録のカードは perf を持たない（既存データはそのまま）。</div>`;
+  return out;
+}
+// 折れ線：直近10本（d7 の ret30 / avgPct のどちらかがあるもの）を古い順に並べる
+function perfChart(items){
+  const pts=items.filter(it=>pv(it.perf,'d7','ret30')!==null||pv(it.perf,'d7','avgPct')!==null).slice(0,10).reverse();
+  if(pts.length<1)return `<div class="pchart"><div class="hint" style="margin:0">d7 の 0:30到達率／平均視聴率が入ったカードがまだありません。</div></div>`;
+  const W=640,H=230,L=40,R=14,T=14,B=44,pw=W-L-R,ph=H-T-B;
+  const series=[['ret30','0:30到達率','#3d9bd6'],['avgPct','平均視聴率','#b8802a']];
+  const x=i=>pts.length===1?L+pw/2:L+pw*i/(pts.length-1);
+  const y=v=>T+ph*(1-Math.max(0,Math.min(100,v))/100);
+  let g='';
+  [0,25,50,75,100].forEach(v=>{g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="#273040" stroke-width="1"/><text x="${L-6}" y="${y(v)+3.5}" fill="#93a0b4" font-size="9.5" text-anchor="end">${v}</text>`;});
+  // 目標ライン（点線）
+  series.forEach(([k,l,c])=>{const tv=PERF_TARGET[k];g+=`<line x1="${L}" x2="${W-R}" y1="${y(tv)}" y2="${y(tv)}" stroke="#ff5d5d" stroke-opacity=".55" stroke-width="1" stroke-dasharray="4 3"/><text x="${L+4}" y="${y(tv)-3}" fill="#ff5d5d" fill-opacity=".8" font-size="9" text-anchor="start">${l} 目標${tv}%</text>`;});
+  // x ラベル（日付）
+  pts.forEach((it,i)=>{g+=`<text x="${x(i)}" y="${H-B+14}" fill="#93a0b4" font-size="9" text-anchor="middle">${it.date.slice(5).replace('-','/')}</text><text x="${x(i)}" y="${H-B+26}" fill="#6b7688" font-size="8.5" text-anchor="middle">${esc(it.title).slice(0,6)}</text>`;});
+  // 系列
+  series.forEach(([k,l,c])=>{
+    let d='',pen=false;
+    pts.forEach((it,i)=>{const v=pv(it.perf,'d7',k);if(v===null){pen=false;return;}d+=(pen?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1);pen=true;});
+    g+=`<path d="${d}" fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    pts.forEach((it,i)=>{const v=pv(it.perf,'d7',k);if(v===null)return;
+      g+=`<circle cx="${x(i)}" cy="${y(v)}" r="4" fill="${c}" stroke="#151a24" stroke-width="2"/>`;
+      if(i===pts.length-1)g+=`<text x="${x(i)-7}" y="${y(v)-8}" fill="#e8ecf3" font-size="9.5" text-anchor="end">${v.toFixed(1)}%</text>`;
+    });
+  });
+  // ホバー用の透明ヒット領域
+  pts.forEach((it,i)=>{const r=pv(it.perf,'d7','ret30'),a=pv(it.perf,'d7','avgPct');
+    const tip=`${it.date.slice(5).replace('-','/')} ${esc(it.title).slice(0,14)}｜0:30到達 ${r===null?'—':r.toFixed(1)+'%'}／平均視聴 ${a===null?'—':a.toFixed(1)+'%'}`;
+    g+=`<rect x="${x(i)-pw/(2*Math.max(1,pts.length-1))}" y="${T}" width="${pw/Math.max(1,pts.length-1)}" height="${ph}" fill="transparent" data-tip="${tip.replace(/"/g,'&quot;')}"/>`;});
+  return `<div class="pchart" onmousemove="perfTip(event)" onmouseleave="perfTip(null)">
+    <div class="plg"><span><i style="background:#3d9bd6"></i>0:30到達率</span><span><i style="background:#b8802a"></i>平均視聴率</span><span><i class="dash"></i>目標ライン</span><span style="margin-left:auto">直近${pts.length}本・単位%</span></div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="直近10本の0:30到達率と平均視聴率">${g}</svg><div class="ptip" id="ptip"></div></div>`;
+}
+function perfTip(ev){
+  const t=document.getElementById('ptip');if(!t)return;
+  const el=ev&&ev.target&&ev.target.getAttribute&&ev.target.getAttribute('data-tip');
+  if(!el){t.style.display='none';return;}
+  const box=ev.currentTarget.getBoundingClientRect();
+  t.textContent=el;t.style.display='block';
+  t.style.left=Math.min(box.width-t.offsetWidth-6,Math.max(4,ev.clientX-box.left+10))+'px';
+  t.style.top=Math.max(4,ev.clientY-box.top-34)+'px';
+}
+
 // ===== interactions =====
 function switchView(v){if(v==='cal'&&VIEW!=='cal')calJump=true;VIEW=v;document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.v===v));render();}
 function advance(id){const it=DATA.find(x=>x.id===id);if(!it)return;if(it.cur<(stagesOf(it).length-1))it.cur++;save();render();}
 
 let editId=null;
-function openModal(id){
+function openModal(id,tab){
   editId=id||null;
   const tsel=document.getElementById('f_track');
   tsel.innerHTML=Object.keys(TRACKS).map(k=>`<option value="${k}">${TRACKS[k].name}</option>`).join('');
@@ -643,6 +803,8 @@ function openModal(id){
   document.getElementById('f_title').value=it?it.title:'';
   document.getElementById('f_date').value=it?it.date:'';
   document.getElementById('f_note').value=it?it.note:'';
+  modalTab(tab==='perf'?'perf':'basic');
+  renderPerfEditor(it&&it.perf?it.perf:null);
   fillStages(tsel.value,it?it.cur:-1);
   renderSched(tsel.value, it?it.sched:null, it?it.date:'');
   tsel.onchange=()=>{fillStages(tsel.value,-1);renderSched(tsel.value,null,document.getElementById('f_date').value);};
@@ -670,8 +832,9 @@ function saveModal(){
   const obj={track:tk,title:document.getElementById('f_title').value.trim()||'(無題)',
     date:document.getElementById('f_date').value,cur:parseInt(document.getElementById('f_cur').value,10),
     note:document.getElementById('f_note').value.trim(),sched:sched};
-  if(editId){touch(Object.assign(DATA.find(x=>x.id===editId),obj));}
-  else{obj.id='i'+Date.now()+Math.floor(Math.random()*1000);touch(obj);DATA.push(obj);}
+  const perf=readPerfEditor();
+  if(editId){const cur=DATA.find(x=>x.id===editId);Object.assign(cur,obj);if(perf)cur.perf=perf;else delete cur.perf;touch(cur);}
+  else{obj.id='i'+Date.now()+Math.floor(Math.random()*1000);if(perf)obj.perf=perf;touch(obj);DATA.push(obj);}
   save();closeModal();render();
 }
 function delItem(){if(editId&&confirm('この項目を削除しますか？')){DATA=DATA.filter(x=>x.id!==editId);save();closeModal();render();}}
